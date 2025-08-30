@@ -46,7 +46,7 @@ RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --n
 MONITOR_LOG=/aipublic/logs/Qwen3-Rerank/monitor.log
 "
 
-# 模型ds-r1-32B配置
+# 模型Qwen2.5-72B配置
 MODELS["ds-r1-32B"]="
 CONTAINER_NAME=ds-r1-32B
 HEALTH_CHECK_URL=http://localhost:30010/health
@@ -57,9 +57,6 @@ RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --n
 MONITOR_LOG=/aipublic/logs/ds-r1-32B/monitor.log
 "
 
-RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --name Qwen2.5-72B --privileged=True --gpus all --shm-size=16g --ipc=host -p 30001:30001 --ulimit memlock=-1 --restart=always -e CUDA_VISIBLE_DEVICES=0,1 vllm:0.10.1 bash -c \"LOG_TIMESTAMP=\\\$(date +%Y%m%d_%H%M%S); python -m vllm.entrypoints.openai.api_server --model /model/Qwen2.5-72B --port 30001 --max-model-len 32000 -tp 2 --max-num-seqs 32 --served-model-name /model/Qwen2.5-72B --enable-auto-tool-choice --tool-call-parser hermes > /aipublic/logs/Qwen2.5-72B/server_log_\\\${LOG_TIMESTAMP}.log 2>&1\"
-MONITOR_LOG=/aipublic/logs/Qwen2.5-72B/monitor.log
-"
 # 创建日志目录
 for model in "${!MODELS[@]}"; do
     # 解析配置
