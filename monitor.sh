@@ -7,23 +7,29 @@ declare -A MODELS
 MODELS["Qwen3-235B"]="
 CONTAINER_NAME=Qwen3-235B
 HEALTH_CHECK_URL=http://localhost:30000/health
-CHECK_INTERVAL=10
-RESTART_DELAY=220
+CHECK_INTERVAL=30
+RESTART_DELAY=200
 MAX_RETRIES=3
-RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --name Qwen3-235B --privileged=True --gpus all --shm-size=16g --ipc=host -p 30000:30000 --ulimit memlock=-1 --restart=always -e CUDA_VISIBLE_DEVICES=4,5,6,7 vllm:0.10.1 bash -c \"LOG_TIMESTAMP=\\\$(date +%Y%m%d_%H%M%S); python -m vllm.entrypoints.openai.api_server --model /model/Qwen3-235B-A22B --port 30000 --max-model-len 32000 -tp 4 --max-num-seqs 32 --served-model-name /model/Qwen3-235B --enable-auto-tool-choice --tool-call-parser hermes > /aipublic/logs/Qwen3-235B/server_log_\\\${LOG_TIMESTAMP}.log 2>&1\"
+RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --name Qwen3-235B --privileged=True --gpus all --shm-size=16g --ipc=host -p 30000:30000 --ulimit memlock=-1 --restart=always -e CUDA_VISIBLE_DEVICES=4,5,6,7 vllm:0.10.1 bash -c \"LOG_TIMESTAMP=\\\$(date +%Y%m%d_%H%M%S); python -m vllm.entrypoints.openai.api_server --model /model/Qwen3-235B-A22B --port 30000 --max-model-len 32000 -tp 4 --max-num-seqs 32 --served-model-name /model/Qwen3-235B --enable-auto-tool-choice --tool-call-parser hermes > /aipublic/logs/Qwen3-235B/log_\\\${LOG_TIMESTAMP}.log 2>&1\"
 MONITOR_LOG=/aipublic/logs/Qwen3-235B/monitor.log
 "
 
-#模型2配置
+# 模型2配置 - 使用特殊的 JSON 字符串处理
 MODELS["Qwen3-Rerank"]="
 CONTAINER_NAME=Qwen3-Rerank
 HEALTH_CHECK_URL=http://localhost:30009/health
 CHECK_INTERVAL=10
 RESTART_DELAY=180
 MAX_RETRIES=3
-RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --name Qwen3-Rerank --privileged=True --gpus all --shm-size=16g --ipc=host -p 30009:30009 --ulimit memlock=-1 --restart=always -e CUDA_VISIBLE_DEVICES=3 vllm:0.10.1 bash -c \"LOG_TIMESTAMP=\\\$(date +%Y%m%d_%H%M%S); python -m vllm.entrypoints.openai.api_server --model /model/Qwen3-Reranker-8B --port 30009 --gpu-memory-utilization 0.4 -tp 1 --max-num-seqs 32 --hf_overrides '{"architectures": ["Qwen3ForSequenceClassification"],"classifier_from_token": ["no", "yes"],"is_original_qwen3_reranker": true}' --served-model-name /model/Qwen3-Rerank > /aipublic/logs/Qwen3-Rerank/log_\\\${LOG_TIMESTAMP}.log 2>&1\"
+# 注意：这里使用特殊的 JSON_OVERRIDES 字段而不是完整的 RUN_COMMAND
+RUN_COMMAND_PREFIX=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --name Qwen3-Rerank --privileged=True --gpus all --shm-size=16g --ipc=host -p 30009:30009 --ulimit memlock=-1 --restart=always -e CUDA_VISIBLE_DEVICES=3 vllm:0.10.1 bash -c \"LOG_TIMESTAMP=\\\$(date +%Y%m%d_%H%M%S); python -m vllm.entrypoints.openai.api_server --model /model/Qwen3-Reranker-8B --port 30009 --gpu-memory-utilization 0.4 -tp 1 --max-num-seqs 32
+RUN_COMMAND_SUFFIX=--served-model-name /model/Qwen3-Rerank > /aipublic/logs/Qwen3-Rerank/log_\\\${LOG_TIMESTAMP}.log 2>&1\"
 MONITOR_LOG=/aipublic/logs/Qwen3-Rerank/monitor.log
 "
+# Qwen3-Rerank 的特殊 JSON 参数
+QWEN3_RERANK_JSON='{"architectures": ["Qwen3ForSequenceClassification"],"classifier_from_token": ["no", "yes"],"is_original_qwen3_reranker": true}'
+
+
 #模型3配置
 MODELS["Qwen3-Embedding"]="
 CONTAINER_NAME=Qwen3-Embedding
@@ -87,8 +93,16 @@ monitor_model() {
     local CHECK_INTERVAL="${config[CHECK_INTERVAL]}"
     local RESTART_DELAY="${config[RESTART_DELAY]}"
     local MAX_RETRIES="${config[MAX_RETRIES]}"
-    local RUN_COMMAND="${config[RUN_COMMAND]}"
     local MONITOR_LOG="${config[MONITOR_LOG]}"
+    
+    # 构建运行命令
+    local RUN_COMMAND
+    if [[ "$model_name" == "Qwen3-Rerank" ]]; then
+        # 特殊处理 Qwen3-Rerank
+        RUN_COMMAND="${config[RUN_COMMAND_PREFIX]} --hf_overrides '${QWEN3_RERANK_JSON}' ${config[RUN_COMMAND_SUFFIX]}"
+    else
+        RUN_COMMAND="${config[RUN_COMMAND]}"
+    fi
     
     # 初始化计数器
     local failure_count=0
