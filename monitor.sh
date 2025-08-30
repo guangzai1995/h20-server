@@ -7,23 +7,34 @@ declare -A MODELS
 MODELS["Qwen3-235B"]="
 CONTAINER_NAME=Qwen3-235B
 HEALTH_CHECK_URL=http://localhost:30000/health
-CHECK_INTERVAL=5
-RESTART_DELAY=200
+CHECK_INTERVAL=10
+RESTART_DELAY=220
 MAX_RETRIES=3
-RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --name Qwen3-235B --privileged=True --gpus all --shm-size=16g --ipc=host -p 30000:30000 --ulimit memlock=-1 --restart=always -e CUDA_VISIBLE_DEVICES=4,5,6,7 vllm:0.10.1 bash -c \"LOG_TIMESTAMP=\\\$(date +%Y%m%d_%H%M%S); python -m vllm.entrypoints.openai.api_server --model /model/Qwen3-235B-A22B --port 30000 --max-model-len 32000 -tp 4 --max-num-seqs 32 --served-model-name /model/Qwen3-235B --enable-auto-tool-choice --tool-call-parser hermes > /aipublic/logs/Qwen3-235B/log_\\\${LOG_TIMESTAMP}.log 2>&1\"
+RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --name Qwen3-235B --privileged=True --gpus all --shm-size=16g --ipc=host -p 30000:30000 --ulimit memlock=-1 --restart=always -e CUDA_VISIBLE_DEVICES=4,5,6,7 vllm:0.10.1 bash -c \"LOG_TIMESTAMP=\\\$(date +%Y%m%d_%H%M%S); python -m vllm.entrypoints.openai.api_server --model /model/Qwen3-235B-A22B --port 30000 --max-model-len 32000 -tp 4 --max-num-seqs 32 --served-model-name /model/Qwen3-235B --enable-auto-tool-choice --tool-call-parser hermes > /aipublic/logs/Qwen3-235B/server_log_\\\${LOG_TIMESTAMP}.log 2>&1\"
 MONITOR_LOG=/aipublic/logs/Qwen3-235B/monitor.log
 "
 
-# 模型2配置示例 - 可以根据需要添加更多模型
-# MODELS["Another-Model"]="
-# CONTAINER_NAME=Another-Model
-# HEALTH_CHECK_URL=http://localhost:30001/health
-# CHECK_INTERVAL=30
-# RESTART_DELAY=180
-# MAX_RETRIES=3
-# RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --name Another-Model --privileged=True --gpus all --shm-size=16g --ipc=host -p 30001:30000 --ulimit memlock=-1 --restart=always -e CUDA_VISIBLE_DEVICES=0,1,2,3 vllm:0.10.1 bash -c \"LOG_TIMESTAMP=\\\$(date +%Y%m%d_%H%M%S); python -m vllm.entrypoints.openai.api_server --model /model/Another-Model --port 30000 --max-model-len 16000 -tp 2 --max-num-seqs 16 --served-model-name /model/Another-Model > /aipublic/logs/Another-Model/log_\\\${LOG_TIMESTAMP}.log 2>&1\"
-# MONITOR_LOG=/aipublic/logs/Another-Model/monitor.log
-# "
+#模型2配置
+MODELS["Qwen3-Rerank"]="
+CONTAINER_NAME=Qwen3-Rerank
+HEALTH_CHECK_URL=http://localhost:30009/health
+CHECK_INTERVAL=10
+RESTART_DELAY=180
+MAX_RETRIES=3
+RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --name Qwen3-Rerank --privileged=True --gpus all --shm-size=16g --ipc=host -p 30009:30009 --ulimit memlock=-1 --restart=always -e CUDA_VISIBLE_DEVICES=3 vllm:0.10.1 bash -c \"LOG_TIMESTAMP=\\\$(date +%Y%m%d_%H%M%S); python -m vllm.entrypoints.openai.api_server --model /model/Qwen3-Reranker-8B --port 30009 --gpu-memory-utilization 0.4 -tp 1 --max-num-seqs 32 --hf_overrides '{"architectures": ["Qwen3ForSequenceClassification"],"classifier_from_token": ["no", "yes"],"is_original_qwen3_reranker": true}' --served-model-name /model/Qwen3-Rerank > /aipublic/logs/Qwen3-Rerank/log_\\\${LOG_TIMESTAMP}.log 2>&1\"
+MONITOR_LOG=/aipublic/logs/Qwen3-Rerank/monitor.log
+"
+#模型3配置
+MODELS["Qwen3-Embedding"]="
+CONTAINER_NAME=Qwen3-Embedding
+HEALTH_CHECK_URL=http://localhost:30002/health
+CHECK_INTERVAL=10
+RESTART_DELAY=180
+MAX_RETRIES=3
+RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --name Qwen3-Embedding --privileged=True --gpus all --shm-size=16g --ipc=host -p 30002:30002 --ulimit memlock=-1 --restart=always -e CUDA_VISIBLE_DEVICES=3 vllm:0.10.1 bash -c \"LOG_TIMESTAMP=\\\$(date +%Y%m%d_%H%M%S); python -m vllm.entrypoints.openai.api_server --model /model/Qwen3-Embedding-8B --port 30002 --gpu-memory-utilization 0.4 -tp 1 --max-num-seqs 32 --served-model-name /model/Qwen3-Embedding > /aipublic/logs/Qwen3-Embedding/log_\\\${LOG_TIMESTAMP}.log 2>&1\"
+MONITOR_LOG=/aipublic/logs/Qwen3-Embedding/monitor.log
+"
+
 
 # 创建日志目录
 for model in "${!MODELS[@]}"; do
@@ -42,18 +53,6 @@ for model in "${!MODELS[@]}"; do
     log_dir=$(dirname "${config[MONITOR_LOG]}")
     mkdir -p "$log_dir"
 done
-
-# 检查容器是否存在
-container_exists() {
-    local container_name=$1
-    docker ps -a --format "{{.Names}}" | grep -q "^${container_name}$"
-}
-
-# 检查容器是否正在运行
-container_running() {
-    local container_name=$1
-    docker ps --format "{{.Names}}" | grep -q "^${container_name}$"
-}
 
 # 监控函数
 monitor_model() {
@@ -94,14 +93,6 @@ monitor_model() {
     echo "最大重试次数: $MAX_RETRIES" >> "$MONITOR_LOG"
     echo "==========================================" >> "$MONITOR_LOG"
     
-    # 初始检查：如果容器不存在，则创建
-    if ! container_exists "$CONTAINER_NAME"; then
-        echo "$(date +'%Y-%m-%d %H:%M:%S') - 容器不存在，创建容器..." >> "$MONITOR_LOG"
-        eval "$RUN_COMMAND" >> "$MONITOR_LOG" 2>&1
-        echo "$(date +'%Y-%m-%d %H:%M:%S') - 容器创建完成，等待 $RESTART_DELAY 秒让模型加载..." >> "$MONITOR_LOG"
-        sleep "$RESTART_DELAY"
-    fi
-    
     while true; do
         # 发送健康检查请求
         response=$(curl -s -w "%{http_code}" -o /dev/null --connect-timeout 3 "$HEALTH_CHECK_URL")
@@ -116,26 +107,25 @@ monitor_model() {
             
             # 达到最大失败次数，重启容器
             if [ $failure_count -ge $MAX_RETRIES ]; then
-                echo "$(date +'%Y-%m-%d %H:%M:%S') - 连续失败达到阈值，准备处理容器..." >> "$MONITOR_LOG"
+                echo "$(date +'%Y-%m-%d %H:%M:%S') - 连续失败达到阈值，准备重启容器..." >> "$MONITOR_LOG"
                 
-                # 检查容器是否存在
-                if container_exists "$CONTAINER_NAME"; then
-                    # 检查容器是否正在运行
-                    if container_running "$CONTAINER_NAME"; then
-                        echo "$(date +'%Y-%m-%d %H:%M:%S') - 重启容器..." >> "$MONITOR_LOG"
-                        docker restart "$CONTAINER_NAME" >> "$MONITOR_LOG" 2>&1
-                    else
-                        echo "$(date +'%Y-%m-%d %H:%M:%S') - 容器已停止，启动容器..." >> "$MONITOR_LOG"
-                        docker start "$CONTAINER_NAME" >> "$MONITOR_LOG" 2>&1
-                    fi
+                # 检查容器是否存在且运行中
+                if docker ps -q --filter "name=$CONTAINER_NAME" > /dev/null; then
+                    echo "$(date +'%Y-%m-%d %H:%M:%S') - 重启容器..." >> "$MONITOR_LOG"
+                    docker restart "$CONTAINER_NAME" >> "$MONITOR_LOG" 2>&1
                 else
                     # 如果容器不存在，则重新创建
                     echo "$(date +'%Y-%m-%d %H:%M:%S') - 容器不存在，重新创建..." >> "$MONITOR_LOG"
+                    # 清理可能存在的旧容器（已停止的）
+                    if docker ps -aq --filter "name=$CONTAINER_NAME" > /dev/null; then
+                        docker rm "$CONTAINER_NAME" >> "$MONITOR_LOG" 2>&1
+                    fi
+                    # 启动新容器
                     eval "$RUN_COMMAND" >> "$MONITOR_LOG" 2>&1
                 fi
                 
                 # 等待模型加载完成
-                echo "$(date +'%Y-%m-%d %H:%M:%S') - 容器处理完成，等待 $RESTART_DELAY 秒让模型加载..." >> "$MONITOR_LOG"
+                echo "$(date +'%Y-%m-%d %H:%M:%S') - 容器重启完成，等待 $RESTART_DELAY 秒让模型加载..." >> "$MONITOR_LOG"
                 sleep "$RESTART_DELAY"
                 
                 # 重置失败计数器
