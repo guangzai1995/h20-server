@@ -68,16 +68,18 @@ RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --n
 MONITOR_LOG=/aipublic/logs/Qwen2.5-VL-72B-Instruct/monitor.log
 "
 
-# 模型Qwen2.5-Omni-7B配置
-MODELS["Qwen2.5-Omni-7B"]="
-CONTAINER_NAME=Qwen2.5-Omni-7B
-HEALTH_CHECK_URL=http://localhost:30011/health
+# 模型DotsOCR配置
+MODELS["DotsOCR"]="
+CONTAINER_NAME=DotsOCR
+HEALTH_CHECK_URL=http://localhost:30017/health
 CHECK_INTERVAL=10
 RESTART_DELAY=180
 MAX_RETRIES=3
-RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --name Qwen2.5-Omni-7B --privileged=True --gpus all --shm-size=16g --ipc=host -p 30011:30011 --ulimit memlock=-1 --restart=always -e CUDA_VISIBLE_DEVICES=4,5 vllm:0.10.1 bash -c \"LOG_TIMESTAMP=\\\$(date +%Y%m%d_%H%M%S); python -m vllm.entrypoints.openai.api_server --model /model/Qwen2.5-Omni-7B --port 30011 --gpu-memory-utilization 0.9 -tp 2 --max-num-seqs 32 --mm-processor-kwargs '{\\\"use_audio_in_video\\\": true}' --served-model-name /model/Qwen2.5-Omni-7B > /aipublic/logs/Qwen2.5-Omni-7B/log_\\\${LOG_TIMESTAMP}.log 2>&1\"
-MONITOR_LOG=/aipublic/logs/Qwen2.5-Omni-7B/monitor.log
+RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --name DotsOCR --privileged=True --gpus all --shm-size=16g --ipc=host -p 30017:30017 --ulimit memlock=-1 --restart=always -e CUDA_VISIBLE_DEVICES=3 -e VLLM_LOGGING_LEVEL=DEBUG -e PYTHONPATH=$(dirname "$hf_model_path"):$PYTHONPATH  dotsocr:0.9.1 bash -c \"LOG_TIMESTAMP=\\\$(date +%Y%m%d_%H%M%S); sed -i '/^from vllm.entrypoints.cli.main import main$/a from DotsOCR import modeling_dots_ocr_vllm' \\\`which vllm\\\`; python -m vllm.entrypoints.openai.api_server --model /model/DotsOCR --port 30017 --gpu-memory-utilization 0.85 --chat-template-content-format string --served-model-name DotsOCR --trust-remote-code > /aipublic/logs/DotsOCR/log_\\\${LOG_TIMESTAMP}.log 2>&1\"
+MONITOR_LOG=/aipublic/logs/DotsOCR/monitor.log
 "
+
+
 
 # 创建日志目录
 for model in "${!MODELS[@]}"; do
