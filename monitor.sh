@@ -35,7 +35,6 @@ RUN_COMMAND=docker run -itd -v /aipublic/model:/model -v /aipublic:/aipublic --n
 MONITOR_LOG=/aipublic/logs/Qwen3-Embedding/monitor.log
 "
 
-
 # 创建日志目录
 for model in "${!MODELS[@]}"; do
     # 解析配置
@@ -53,6 +52,18 @@ for model in "${!MODELS[@]}"; do
     log_dir=$(dirname "${config[MONITOR_LOG]}")
     mkdir -p "$log_dir"
 done
+
+# 检查容器是否存在
+container_exists() {
+    local container_name=$1
+    docker ps -a --format "{{.Names}}" | grep -q "^${container_name}$"
+}
+
+# 检查容器是否正在运行
+container_running() {
+    local container_name=$1
+    docker ps --format "{{.Names}}" | grep -q "^${container_name}$"
+}
 
 # 监控函数
 monitor_model() {
@@ -93,6 +104,14 @@ monitor_model() {
     echo "最大重试次数: $MAX_RETRIES" >> "$MONITOR_LOG"
     echo "==========================================" >> "$MONITOR_LOG"
     
+    # 初始检查：如果容器不存在，则创建
+    if ! container_exists "$CONTAINER_NAME"; then
+        echo "$(date +'%Y-%m-%d %H:%M:%S') - 容器不存在，创建容器..." >> "$MONITOR_LOG"
+        eval "$RUN_COMMAND" >> "$MONITOR_LOG" 2>&1
+        echo "$(date +'%Y-%m-%d %H:%M:%S') - 容器创建完成，等待 $RESTART_DELAY 秒让模型加载..." >> "$MONITOR_LOG"
+        sleep "$RESTART_DELAY"
+    fi
+    
     while true; do
         # 发送健康检查请求
         response=$(curl -s -w "%{http_code}" -o /dev/null --connect-timeout 3 "$HEALTH_CHECK_URL")
@@ -107,25 +126,26 @@ monitor_model() {
             
             # 达到最大失败次数，重启容器
             if [ $failure_count -ge $MAX_RETRIES ]; then
-                echo "$(date +'%Y-%m-%d %H:%M:%S') - 连续失败达到阈值，准备重启容器..." >> "$MONITOR_LOG"
+                echo "$(date +'%Y-%m-%d %H:%M:%S') - 连续失败达到阈值，准备处理容器..." >> "$MONITOR_LOG"
                 
-                # 检查容器是否存在且运行中
-                if docker ps -q --filter "name=$CONTAINER_NAME" > /dev/null; then
-                    echo "$(date +'%Y-%m-%d %H:%M:%S') - 重启容器..." >> "$MONITOR_LOG"
-                    docker restart "$CONTAINER_NAME" >> "$MONITOR_LOG" 2>&1
+                # 检查容器是否存在
+                if container_exists "$CONTAINER_NAME"; then
+                    # 检查容器是否正在运行
+                    if container_running "$CONTAINER_NAME"; then
+                        echo "$(date +'%Y-%m-%d %H:%M:%S') - 重启容器..." >> "$MONITOR_LOG"
+                        docker restart "$CONTAINER_NAME" >> "$MONITOR_LOG" 2>&1
+                    else
+                        echo "$(date +'%Y-%m-%d %H:%M:%S') - 容器已停止，启动容器..." >> "$MONITOR_LOG"
+                        docker start "$CONTAINER_NAME" >> "$MONITOR_LOG" 2>&1
+                    fi
                 else
                     # 如果容器不存在，则重新创建
                     echo "$(date +'%Y-%m-%d %H:%M:%S') - 容器不存在，重新创建..." >> "$MONITOR_LOG"
-                    # 清理可能存在的旧容器（已停止的）
-                    if docker ps -aq --filter "name=$CONTAINER_NAME" > /dev/null; then
-                        docker rm "$CONTAINER_NAME" >> "$MONITOR_LOG" 2>&1
-                    fi
-                    # 启动新容器
                     eval "$RUN_COMMAND" >> "$MONITOR_LOG" 2>&1
                 fi
                 
                 # 等待模型加载完成
-                echo "$(date +'%Y-%m-%d %H:%M:%S') - 容器重启完成，等待 $RESTART_DELAY 秒让模型加载..." >> "$MONITOR_LOG"
+                echo "$(date +'%Y-%m-%d %H:%M:%S') - 容器处理完成，等待 $RESTART_DELAY 秒让模型加载..." >> "$MONITOR_LOG"
                 sleep "$RESTART_DELAY"
                 
                 # 重置失败计数器
